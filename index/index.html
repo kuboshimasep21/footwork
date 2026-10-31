@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>バドミントン フットワーク・トレーナー（音声対応）</title>
+    <!-- PWA用設定 -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-white font-sans select-none min-h-screen flex flex-col justify-between p-4">
+
+    <!-- ヘッダー -->
+    <header class="text-center py-2">
+        <h1 class="text-xl font-bold tracking-wider text-amber-400">⚡ フットワーク・トレーナー</h1>
+        <p class="text-xs text-slate-400">音声案内対応版</p>
+    </header>
+
+    <!-- 設定画面 -->
+    <div id="setup-screen" class="space-y-4 max-w-md mx-auto w-full bg-slate-800 p-5 rounded-2xl shadow-xl border border-slate-700">
+        <div>
+            <label class="block text-sm font-medium text-slate-300 mb-1">指示ペース (秒)</label>
+            <div class="flex items-center gap-3">
+                <input type="range" id="tempo" min="1.5" max="3.5" step="0.1" value="2.5" class="w-full accent-amber-500 h-2 bg-slate-700 rounded-lg cursor-pointer">
+                <span id="tempo-val" class="text-lg font-bold text-amber-400 w-14 text-right">2.5秒</span>
+            </div>
+        </div>
+
+        <div>
+            <label class="block text-sm font-medium text-slate-300 mb-1">エリア設定</label>
+            <select id="area-type" class="w-full bg-slate-700 border border-slate-600 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-amber-500">
+                <option value="4">四隅（4点・高負荷）</option>
+                <option value="6">オールラウンド（6点・サイド含む）</option>
+            </select>
+        </div>
+
+        <button onclick="startTraining()" class="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold py-4 rounded-xl shadow-lg transition transform active:scale-95 text-lg mt-2">
+            トレーニング開始 🚀
+        </button>
+    </div>
+
+    <!-- トレーニング実行画面 -->
+    <div id="train-screen" class="hidden flex-col items-center justify-center flex-grow max-w-md mx-auto w-full space-y-6">
+        <div class="text-center">
+            <span id="status-text" class="text-sm tracking-widest uppercase text-slate-400">Ready...</span>
+            <div id="countdown" class="text-6xl font-black text-amber-400 mt-2">3</div>
+        </div>
+
+        <!-- 指示表示パネル -->
+        <div id="signal-box" class="w-72 h-72 rounded-3xl bg-slate-800 border-4 border-slate-700 flex items-center justify-center shadow-2xl transition-all duration-150">
+            <span id="signal-text" class="text-3xl font-black text-slate-500">待機中</span>
+        </div>
+
+        <button onclick="stopTraining()" class="bg-rose-600 hover:bg-rose-700 text-white font-bold px-8 py-3 rounded-xl shadow transition transform active:scale-95">
+            終了する
+        </button>
+    </div>
+
+    <!-- フッター -->
+    <footer class="text-center text-xs text-slate-500 py-2">
+        &copy; Badminton Footwork Training App
+    </footer>
+
+    <script>
+        let timer = null;
+        let isRunning = false;
+
+        // 音声読み上げ（Speech Synthesis API）関数
+        function speak(text) {
+            if (!('speechSynthesis' in window)) return;
+            // 溜まっている音声をキャンセルして即座に喋らせる
+            window.speechSynthesis.cancel();
+            
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'ja-JP';
+            utterance.rate = 1.2; // 少し早めのテンポに調整
+            utterance.pitch = 1.0;
+            window.speechSynthesis.speak(utterance);
+        }
+
+        const tempoInput = document.getElementById('tempo');
+        const tempoVal = document.getElementById('tempo-val');
+        tempoInput.addEventListener('input', (e) => {
+            tempoVal.textContent = e.target.value + '秒';
+        });
+
+        function startTraining() {
+            document.getElementById('setup-screen').classList.add('hidden');
+            document.getElementById('train-screen').classList.remove('hidden');
+            
+            isRunning = true;
+            let count = 3;
+            const cdEl = document.getElementById('countdown');
+            const box = document.getElementById('signal-box');
+            const txt = document.getElementById('signal-text');
+            const status = document.getElementById('status-text');
+            
+            cdEl.classList.remove('hidden');
+            box.classList.add('hidden');
+            cdEl.textContent = count;
+            status.textContent = "まもなくスタート";
+            speak("3");
+
+            let cdTimer = setInterval(() => {
+                if (!isRunning) {
+                    clearInterval(cdTimer);
+                    return;
+                }
+                count--;
+                if (count > 0) {
+                    cdEl.textContent = count;
+                    speak(count.toString());
+                } else if (count === 0) {
+                    cdEl.textContent = "スタート";
+                    speak("スタート");
+                } else {
+                    clearInterval(cdTimer);
+                    cdEl.classList.add('hidden');
+                    box.classList.remove('hidden');
+                    status.textContent = "トレーニング中";
+                    runLoop();
+                }
+            }, 1000);
+        }
+
+        function runLoop() {
+            if (!isRunning) return;
+            const tempo = parseFloat(tempoInput.value) * 1000;
+            const areaType = document.getElementById('area-type').value;
+            const areas = areaType === '4' ? ['左奥', '右奥', '左前', '右前'] : ['左奥', '右奥', '左前', '右前', 'サイドレシーブ左', 'サイドレシーブ右'];
+            
+            let lastIndex = -1;
+
+            function nextSignal() {
+                if (!isRunning) return;
+
+                let idx;
+                do {
+                    idx = Math.floor(Math.random() * areas.length);
+                } while (idx === lastIndex && areas.length > 1);
+                lastIndex = idx;
+
+                const area = areas[idx];
+                const txt = document.getElementById('signal-text');
+                const box = document.getElementById('signal-box');
+
+                txt.textContent = area;
+                
+                // エリア名を音声で読み上げ
+                speak(area);
+
+                // 視覚的エフェクト
+                box.className = "w-72 h-72 rounded-3xl bg-amber-500 border-4 border-amber-300 flex items-center justify-center shadow-2xl transition-all duration-150 scale-105 text-slate-950 font-black";
+                
+                setTimeout(() => {
+                    if (box) {
+                        box.className = "w-72 h-72 rounded-3xl bg-slate-800 border-4 border-slate-700 flex items-center justify-center shadow-2xl transition-all duration-150 text-white font-black";
+                    }
+                }, 300);
+
+                timer = setTimeout(nextSignal, tempo);
+            }
+
+            nextSignal();
+        }
+
+        function stopTraining() {
+            isRunning = false;
+            clearTimeout(timer);
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+            }
+            document.getElementById('train-screen').classList.add('hidden');
+            document.getElementById('setup-screen').classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
